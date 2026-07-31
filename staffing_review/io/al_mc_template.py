@@ -11,6 +11,8 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 import pandas as pd
 
+from staffing_review.io.filenames import outlook_filename
+
 ROW_LABEL_PATTERN = re.compile(
     r"^(?P<floor>AL[1-3]|MC[1-2])\s*-\s*"
     r"(?P<role>MT|CG)(?P<slot>\d*)\s*$",
@@ -402,8 +404,6 @@ def export_al_mc_template(
     return output.getvalue()
 
 
-def al_mc_template_filename(source_label: str) -> str:
-    """Create a Windows-safe populated-template download name."""
-    stem = Path(source_label).stem
-    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._")
-    return f"{cleaned or 'al_mc_schedule'}_AL_MC_template.xlsx"
+def al_mc_template_filename(records: pd.DataFrame) -> str:
+    """Create the approved AL/MC populated-template download name."""
+    return outlook_filename(records, "AL-MC", "xlsx")

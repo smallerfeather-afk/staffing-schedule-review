@@ -1,5 +1,7 @@
 """Compose mapping, normalization, validation, and sorting."""
 
+import re
+
 import pandas as pd
 
 from staffing_review.constants import PDF_METADATA_COLUMNS, REVIEW_COLUMNS
@@ -16,7 +18,17 @@ def prepare_source_records(data: pd.DataFrame) -> pd.DataFrame:
 
 def review_records(data: pd.DataFrame) -> pd.DataFrame:
     """Normalize, validate, sort, and stabilize review columns."""
-    reviewed = validate_records(normalize_records(data))
+    normalized = normalize_records(data)
+    default_location = normalized["floor"].map(
+        lambda value: bool(
+            re.fullmatch(
+                r"(?:[A-Za-z0-9]+\s*-\s*)?Default",
+                str(value).strip(),
+                re.IGNORECASE,
+            )
+        )
+    )
+    reviewed = validate_records(normalized.loc[~default_location].copy())
     optional_columns = [
         column for column in PDF_METADATA_COLUMNS if column in reviewed.columns
     ]

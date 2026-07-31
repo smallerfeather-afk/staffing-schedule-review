@@ -12,13 +12,14 @@ from staffing_review.io.al_mc_template import (
     al_mc_template_filename,
     export_al_mc_template,
 )
-from staffing_review.io.exporters import export_filename, export_reviewed_schedule
+from staffing_review.io.filenames import OutlookFilenameError, outlook_filename
 from staffing_review.io.pdf_reader import PDFExtractionError, extract_ukg_schedule
 from staffing_review.io.snf_template import (
     SNFTemplateError,
     export_snf_template,
     snf_template_filename,
 )
+from staffing_review.io.template_pdf import TemplatePDFError, export_template_pdf
 from staffing_review.io.readers import (
     ScheduleReadError,
     read_file_bytes,
@@ -29,15 +30,7 @@ from staffing_review.services.review import prepare_source_records, review_recor
 from staffing_review.ui.review_table import render_review_table
 from staffing_review.ui.summaries import render_validation_summary
 
-SAMPLE_PATH = Path(__file__).parents[2] / "sample_data" / "synthetic_schedule_valid.csv"
 _PRESERVE_SOURCE = object()
-
-
-def _load_sample() -> pd.DataFrame:
-    with SAMPLE_PATH.open("rb") as sample_file:
-        return prepare_source_records(
-            read_schedule(sample_file, filename=SAMPLE_PATH.name)
-        )
 
 
 def _set_records(
@@ -54,11 +47,21 @@ def _set_records(
     )
 
 
+def _clear_records() -> None:
+    st.session_state.review_records = None
+    st.session_state.source_label = None
+    st.session_state.source_workbook = None
+    st.session_state.editor_revision = (
+        st.session_state.get("editor_revision", 0) + 1
+    )
+
+
 def _initialize_state() -> None:
-    if "review_records" not in st.session_state:
-        _set_records(_load_sample(), "Synthetic sample schedule", None)
+    st.session_state.setdefault("review_records", None)
+    st.session_state.setdefault("source_label", None)
+    st.session_state.setdefault("source_workbook", None)
+    st.session_state.setdefault("editor_revision", 0)
     st.session_state.setdefault("upload_signature", None)
-    st.session_state.setdefault("upload_revision", 0)
     st.session_state.setdefault("extraction_notice", None)
 
 
@@ -154,7 +157,9 @@ def _process_upload(uploaded_file: object) -> str | None:
             reviewed = prepare_source_records(source)
             st.session_state.extraction_notice = None
     except (PDFExtractionError, ScheduleReadError, MissingColumnsError) as exc:
+        _clear_records()
         st.session_state.upload_signature = signature
+        st.session_state.extraction_notice = None
         return str(exc)
 
     source_workbook = payload if Path(filename).suffix.casefold() == ".xlsx" else None
@@ -172,29 +177,27 @@ def render_app() -> None:
     _initialize_state()
     _render_header()
 
-    st.subheader("1. Choose a schedule")
-    upload_col, sample_col = st.columns([3, 1], vertical_alignment="bottom")
-    with upload_col:
-        uploaded_file = st.file_uploader(
-            "Upload a CSV, Excel, or UKG PDF schedule",
-            type=["csv", "xlsx", "xls", "pdf"],
-            key=f"schedule_upload_{st.session_state.upload_revision}",
-            help=(
-                "CSV/Excel required columns: employee name, shift date, "
-                "start time, unit, and floor; role is optional. PDF supports "
-                "separate AL/MC and SNF UKG Employee Schedule - Weekly "
-                "reports."
-            ),
-        )
-    with sample_col:
-        if st.button("Restore synthetic sample", width="stretch"):
-            _set_records(_load_sample(), "Synthetic sample schedule", None)
-            st.session_state.upload_signature = None
-            st.session_state.extraction_notice = None
-            st.session_state.upload_revision += 1
-            st.rerun()
+    st.subheader("1. Upload a schedule")
+    st.write(
+        "Choose an AL/MC or SNF schedule document to begin. Review, "
+        "validation, and download options will appear after processing."
+    )
+    uploaded_file = st.file_uploader(
+        "Upload a CSV, Excel, or UKG PDF schedule",
+        type=["csv", "xlsx", "xls", "pdf"],
+        key="schedule_upload",
+        help=(
+            "CSV/Excel required columns: employee name, shift date, "
+            "start time, unit, and floor; role is optional. PDF supports "
+            "separate AL/MC and SNF UKG Employee Schedule - Weekly reports."
+        ),
+    )
 
     upload_error = _process_upload(uploaded_file) if uploaded_file else None
+    if uploaded_file is None and st.session_state.upload_signature is not None:
+        _clear_records()
+        st.session_state.upload_signature = None
+        st.session_state.extraction_notice = None
     if upload_error:
         st.error(upload_error, icon=":material/error:")
     if st.session_state.extraction_notice:
@@ -203,12 +206,16 @@ def render_app() -> None:
             icon=":material/warning:",
         )
 
+    if st.session_state.review_records is None:
+        return
+
     st.caption(f"Reviewing: **{st.session_state.source_label}**")
     st.subheader("2. Review and edit")
     st.write(
         "Edit values directly in the table. Validation updates below as you "
         "work. Use the button to normalize dates and times and restore "
-        "chronological order."
+        "chronological order. Shifts assigned to the Default location are "
+        "excluded as non-floor staffing records."
     )
 
     edited = render_review_table(
@@ -228,14 +235,10 @@ def render_app() -> None:
     st.subheader("3. Validation summary")
     render_validation_summary(live_review)
 
-    st.subheader("4. Export cleaned workbook")
+    st.subheader("4. Generate 2 week outlook")
     st.write(
-        "Download the current reviewed records as an Excel workbook. Invalid "
-        "rows are highlighted red and open shifts are highlighted amber."
-    )
-    export_bytes = export_reviewed_schedule(
-        live_review,
-        st.session_state.get("source_workbook"),
+        "Download the populated operational template as Excel or PDF. "
+        "Invalid rows are excluded from generated files."
     )
     template_kind = _schedule_template_kind(live_review)
     if template_kind == "al_mc":
@@ -243,63 +246,97 @@ def render_app() -> None:
         st.caption(
             "The approved blank template is stored in the application. "
             "Each download is a newly populated copy. Invalid rows are "
-            "excluded from this operational template."
+            "excluded from this operational template. The PDF uses two "
+            "landscape 11 x 17 pages: Assisted Living first, then Memory "
+            "Care."
         )
         try:
             template_bytes = export_al_mc_template(live_review)
-        except ALMCTemplateError as exc:
+            pdf_bytes = export_template_pdf(
+                template_bytes,
+                department="AL-MC",
+            )
+            excel_filename = al_mc_template_filename(live_review)
+            pdf_filename = outlook_filename(live_review, "AL-MC", "pdf")
+        except (
+            ALMCTemplateError,
+            OutlookFilenameError,
+            TemplatePDFError,
+        ) as exc:
             st.error(str(exc), icon=":material/error:")
         else:
-            st.download_button(
-                "Download populated AL/MC template",
-                data=template_bytes,
-                file_name=al_mc_template_filename(
-                    st.session_state.source_label
-                ),
-                mime=(
-                    "application/vnd.openxmlformats-officedocument."
-                    "spreadsheetml.sheet"
-                ),
-                type="primary",
-                icon=":material/download:",
-            )
+            excel_column, pdf_column = st.columns(2)
+            with excel_column:
+                st.download_button(
+                    "Download AL/MC Excel template",
+                    data=template_bytes,
+                    file_name=excel_filename,
+                    mime=(
+                        "application/vnd.openxmlformats-officedocument."
+                        "spreadsheetml.sheet"
+                    ),
+                    type="primary",
+                    icon=":material/download:",
+                    use_container_width=True,
+                )
+            with pdf_column:
+                st.download_button(
+                    "Download AL/MC two-page PDF",
+                    data=pdf_bytes,
+                    file_name=pdf_filename,
+                    mime="application/pdf",
+                    icon=":material/picture_as_pdf:",
+                    use_container_width=True,
+                )
     elif template_kind == "snf":
         st.markdown("**SNF two-week template**")
         st.caption(
             "The approved blank template is stored in the application. "
             "The UKG care setting automatically selected the SNF layout. "
-            "Invalid rows are excluded from this operational template."
+            "Invalid rows are excluded from this operational template. "
+            "The PDF fits the complete schedule on one landscape 11 x 17 "
+            "page."
         )
         try:
             template_bytes = export_snf_template(live_review)
-        except SNFTemplateError as exc:
+            pdf_bytes = export_template_pdf(
+                template_bytes,
+                department="SNF",
+            )
+            excel_filename = snf_template_filename(live_review)
+            pdf_filename = outlook_filename(live_review, "SNF", "pdf")
+        except (
+            OutlookFilenameError,
+            SNFTemplateError,
+            TemplatePDFError,
+        ) as exc:
             st.error(str(exc), icon=":material/error:")
         else:
-            st.download_button(
-                "Download populated SNF template",
-                data=template_bytes,
-                file_name=snf_template_filename(
-                    st.session_state.source_label
-                ),
-                mime=(
-                    "application/vnd.openxmlformats-officedocument."
-                    "spreadsheetml.sheet"
-                ),
-                type="primary",
-                icon=":material/download:",
-            )
+            excel_column, pdf_column = st.columns(2)
+            with excel_column:
+                st.download_button(
+                    "Download SNF Excel template",
+                    data=template_bytes,
+                    file_name=excel_filename,
+                    mime=(
+                        "application/vnd.openxmlformats-officedocument."
+                        "spreadsheetml.sheet"
+                    ),
+                    type="primary",
+                    icon=":material/download:",
+                    use_container_width=True,
+                )
+            with pdf_column:
+                st.download_button(
+                    "Download SNF one-page PDF",
+                    data=pdf_bytes,
+                    file_name=pdf_filename,
+                    mime="application/pdf",
+                    icon=":material/picture_as_pdf:",
+                    use_container_width=True,
+                )
 
-    st.download_button(
-        "Download generic review workbook",
-        data=export_bytes,
-        file_name=export_filename(st.session_state.source_label),
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        ),
-        icon=":material/download:",
-    )
     st.caption(
-        "The workbook is downloaded locally only. Nothing is emailed, "
+        "Files are downloaded locally only. Nothing is emailed, "
         "uploaded, or distributed automatically."
     )

@@ -1,3 +1,3 @@
 """Core package for the staffing schedule review application."""
 
-__version__ = "0.7.2"
+__version__ = "0.9.1"

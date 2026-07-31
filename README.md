@@ -55,21 +55,19 @@ Available now:
 
 - local CSV, `.xlsx`, and `.xls` schedule upload
 - common source-header mapping and required-column validation
-- a synthetic schedule loaded by default
+- document-first interface that reveals review tools after upload
 - editable schedule records
 - date and start-time normalization
 - assisted living, memory care, and skilled nursing unit validation
 - optional per-shift role extraction and editing
 - floor validation
+- automatic exclusion of non-floor shifts with location `Default`
 - row-level validation messages and summary counts
 - chronological sorting
-- local cleaned `.xlsx` download
-- mapped source formatting preservation for `.xlsx` uploads
-- red highlighting for invalid records
-- amber highlighting for OPEN or blank-employee shifts
 - UKG `Employee Schedule - Weekly` PDF extraction
 - confidence scores, source-page traceability, and extraction notes
 - manual confirmation checkboxes for uncertain PDF records
+- two-page AL/MC and one-page SNF landscape PDF output
 
 ## Required Schedule Fields
 
@@ -88,32 +86,23 @@ Floor labels may be numeric or text, such as `1`, `2A`, or `Ground`.
 
 ## Review Workflow
 
-1. Start with the synthetic schedule or upload one local schedule.
+1. Upload one local CSV, Excel, or supported UKG PDF schedule.
 2. Correct records directly in the review table.
 3. Review live validation counts and row-level messages.
 4. Select **Normalize and sort records** to standardize dates and times and
    restore chronological order.
-5. Select **Download cleaned Excel workbook** to save the current reviewed
-   schedule locally.
+5. Download the populated operational template as Excel or PDF.
 
 For a UKG PDF, review records with extraction confidence below `0.80` and
 check **Extraction reviewed** after confirming each uncertain row.
 Upload and export the AL/MC and SNF reports separately; combining the source
 PDFs is not required.
 
-## Excel Export
+## Operational Export
 
-The cleaned workbook contains canonical field names, typed Excel dates and
-times, the current validation status and messages, frozen headers, filters,
-and print-friendly column widths. Formatting from mapped `.xlsx` source cells
-is preserved where practical. CSV and legacy `.xls` sources use the clean
-default workbook style.
-
-Invalid records remain exportable with visible red highlighting so work is
-never silently discarded. OPEN shifts use amber highlighting. Downloads are
+Invalid records remain visible in the review table for correction but are
+excluded from populated AL/MC and SNF operational templates. Downloads are
 manual and local; the application does not email, upload, or distribute files.
-The generic review workbook retains invalid rows for correction and audit.
-Invalid rows are excluded from populated AL/MC and SNF operational templates.
 
 The approved AL/MC and SNF blank two-week templates are stored in the
 application. The app automatically selects the matching template when the
@@ -127,6 +116,15 @@ SNF CNA shifts map to the exact source hall row. LPN and RN shifts map to the
 nurse section, with RN names shown in purple and without a role suffix. When a
 Folly PM nurse slot is OPEN and Morris has named coverage, those two PM cells
 are merged and display only the Morris nurse names.
+
+Each populated operational template is available as Excel and as a vector PDF
+with landscape 11 x 17-inch pages and 0.1-inch margins. The AL/MC PDF contains
+two pages for readability: Assisted Living on page 1 and Memory Care on page
+2. The SNF PDF contains the complete template on one page. Both formats use
+the filename pattern
+`2 Week Outlook - AL-MC - MM.DD to MM.DD` or
+`2 Week Outlook - SNF - MM.DD to MM.DD`. The date range always represents the
+full 14-day template period.
 
 ## UKG PDF Processing
 

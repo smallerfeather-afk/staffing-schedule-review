@@ -76,8 +76,9 @@ def _extract_floor(shift_text: str, role: str) -> tuple[str, str | None]:
 
     role_suffix = re.compile(rf"/\s*{re.escape(role)}\s*$", re.IGNORECASE)
     location = role_suffix.sub("", location).strip()
-    if " - " in location:
-        location = location.split(" - ", 1)[1].strip()
+    location_parts = re.split(r"\s*-\s*", location, maxsplit=1)
+    if len(location_parts) == 2:
+        location = location_parts[1].strip()
     else:
         return location, "Location prefix was not recognized"
 

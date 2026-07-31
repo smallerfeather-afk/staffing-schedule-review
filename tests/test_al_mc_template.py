@@ -206,8 +206,8 @@ def test_excludes_invalid_records_and_rejects_wrong_template() -> None:
 
 
 def test_template_filename_is_windows_safe() -> None:
-    assert al_mc_template_filename("AL MC report.pdf") == (
-        "AL_MC_report_AL_MC_template.xlsx"
+    assert al_mc_template_filename(_records()) == (
+        "2 Week Outlook - AL-MC - 07.31 to 08.13.xlsx"
     )
 
 

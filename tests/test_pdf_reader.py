@@ -199,6 +199,20 @@ def test_shift_floor_overrides_employee_facility_header() -> None:
     assert reviewed.loc[0, "unit"] == "Memory Care"
 
 
+def test_excludes_default_location_shift_from_review() -> None:
+    payload = _synthetic_ukg_pdf(
+        {
+            0: ("7:00 AM - 3:00 PM", "WDI- Default/CNA"),
+            1: ("7:00 AM - 3:00 PM", "WDI - S1 South/CNA"),
+        }
+    )
+
+    reviewed = review_records(extract_ukg_schedule(payload))
+
+    assert reviewed["employee_name"].tolist() == ["Avery Stone"]
+    assert reviewed["floor"].tolist() == ["S1 South"]
+
+
 def test_rejects_non_pdf_content() -> None:
     with pytest.raises(PDFExtractionError, match="could not be read"):
         extract_ukg_schedule(b"not a PDF")

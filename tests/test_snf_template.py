@@ -200,6 +200,6 @@ def test_merges_open_folly_pm_with_named_morris_and_colors_rn() -> None:
 
 def test_built_in_template_and_filename() -> None:
     assert BUILT_IN_TEMPLATE_PATH.is_file()
-    assert snf_template_filename("SNF weekly report.pdf") == (
-        "SNF_weekly_report_SNF_template.xlsx"
+    assert snf_template_filename(_records()) == (
+        "2 Week Outlook - SNF - 07.31 to 08.13.xlsx"
     )

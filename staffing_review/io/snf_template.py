@@ -14,6 +14,8 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 import pandas as pd
 
+from staffing_review.io.filenames import outlook_filename
+
 BUILT_IN_TEMPLATE_PATH = (
     Path(__file__).parents[2]
     / "templates"
@@ -473,8 +475,6 @@ def export_snf_template(records: pd.DataFrame) -> bytes:
     return output.getvalue()
 
 
-def snf_template_filename(source_label: str) -> str:
-    """Create a Windows-safe populated-template download name."""
-    stem = Path(source_label).stem
-    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._")
-    return f"{cleaned or 'snf_schedule'}_SNF_template.xlsx"
+def snf_template_filename(records: pd.DataFrame) -> str:
+    """Create the approved SNF populated-template download name."""
+    return outlook_filename(records, "SNF", "xlsx")
