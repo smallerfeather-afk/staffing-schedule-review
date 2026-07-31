@@ -1,0 +1,17 @@
+node_modules/
+.env
+.env.*
+!.env.example
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+.qa_render/
+outputs/
+tmp/
+
+*.log
+streamlit.stdout.log
+streamlit.stderr.log
