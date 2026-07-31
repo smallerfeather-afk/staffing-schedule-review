@@ -6,8 +6,8 @@ from staffing_review.constants import CANONICAL_FIELDS
 
 
 def test_scaffold_metadata() -> None:
-    assert __version__ == "0.7.1"
-    assert APP_TITLE == "Staffing Schedule Review"
+    assert __version__ == "0.7.2"
+    assert APP_TITLE == "2 week schedule generator"
     assert MILESTONE_LABEL == (
         "Milestone 4 AL/MC and SNF template export"
     )

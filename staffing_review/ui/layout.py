@@ -67,14 +67,39 @@ def _render_header() -> None:
         """
         <style>
         .stApp {
+            background-color: var(--background-color);
             background:
-              radial-gradient(circle at 88% 4%, rgba(218, 151, 61, .14), transparent 30rem),
-              linear-gradient(180deg, #f6f3ec 0%, #fbfaf7 28rem);
+              radial-gradient(
+                circle at 88% 4%,
+                color-mix(in srgb, #da973d 16%, transparent),
+                transparent 30rem
+              ),
+              linear-gradient(
+                180deg,
+                color-mix(
+                  in srgb,
+                  var(--background-color) 95%,
+                  var(--primary-color) 5%
+                ) 0%,
+                var(--background-color) 28rem
+              );
+            color: var(--text-color);
         }
-        h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; color: #183a35; }
+        h1, h2, h3 {
+            font-family: Georgia, "Times New Roman", serif;
+            color: var(--text-color);
+        }
         [data-testid="stMetric"] {
-            background: rgba(255, 255, 255, .72);
-            border: 1px solid #d8d1c3;
+            background: color-mix(
+              in srgb,
+              var(--secondary-background-color) 88%,
+              transparent
+            );
+            border: 1px solid color-mix(
+              in srgb,
+              var(--text-color) 18%,
+              transparent
+            );
             border-radius: 10px;
             padding: .75rem 1rem;
         }

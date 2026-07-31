@@ -15,7 +15,7 @@ def test_app_loads_synthetic_review_workflow() -> None:
     app = AppTest.from_file(str(app_path), default_timeout=10).run()
 
     assert not app.exception
-    assert app.title[0].value == "Staffing Schedule Review"
+    assert app.title[0].value == "2 week schedule generator"
     assert len(app.get("file_uploader")) == 1
     assert len(app.dataframe) == 1
     assert len(app.get("download_button")) == 1
