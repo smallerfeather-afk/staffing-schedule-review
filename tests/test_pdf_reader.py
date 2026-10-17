@@ -3,6 +3,7 @@
 from io import BytesIO
 
 import pytest
+from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.pdfgen import canvas
 
@@ -17,6 +18,7 @@ def _synthetic_ukg_pdf(
     shift_cells: dict[int, tuple[str, str]],
     query: str = "Skilled Nursing",
     continuation_cells: dict[int, tuple[str, str]] | None = None,
+    assigned_location: str | None = None,
 ) -> bytes:
     output = BytesIO()
     page = canvas.Canvas(output, pagesize=landscape(letter))
@@ -53,6 +55,8 @@ def _synthetic_ukg_pdf(
         facility = "Synthetic Community/Healthcare MC/WDI - MC1"
     else:
         facility = "Synthetic Community/Default"
+    if assigned_location is not None:
+        facility = facility.rsplit("/", 1)[0] + "/" + assigned_location
     page.drawString(
         x_positions[0] + 3,
         table_top - 13,
@@ -216,3 +220,112 @@ def test_excludes_default_location_shift_from_review() -> None:
 def test_rejects_non_pdf_content() -> None:
     with pytest.raises(PDFExtractionError, match="could not be read"):
         extract_ukg_schedule(b"not a PDF")
+
+
+@pytest.mark.parametrize(
+    ("query", "assigned_location", "expected_floor"),
+    [
+        ("Assisted Living", "WDI - AL1", "AL1"),
+        ("Memory Care", "WDI - MC2", "MC2"),
+        ("Skilled Nursing", "WDI - S2 North", "S2 North"),
+    ],
+)
+def test_time_only_shifts_use_assigned_neighborhood(
+    query: str, assigned_location: str, expected_floor: str
+) -> None:
+    payload = _synthetic_ukg_pdf(
+        {0: ("7:00 PM - 7:00 AM", "")},
+        query=query,
+        assigned_location=assigned_location,
+        continuation_cells={1: ("7:00 AM - 3:00 PM", "")},
+    )
+
+    records = review_records(extract_ukg_schedule(payload))
+
+    assert len(records) == 2  # Empty calendar cells never become shifts.
+    assert records["floor"].tolist() == [expected_floor, expected_floor]
+    assert records["unit"].tolist() == [query, query]
+    assert records["role"].tolist() == ["CNA", "CNA"]
+    assert records["start_time"].tolist() == ["19:00", "07:00"]
+    assert records["extraction_confidence"].tolist() == [1.0, 1.0]
+    assert records["validation_status"].tolist() == ["Valid", "Valid"]
+
+
+def test_calendar_override_applies_only_to_its_own_shift() -> None:
+    payload = _synthetic_ukg_pdf(
+        {
+            0: ("7:00 PM - 7:15 AM", ""),
+            1: ("7:00 PM - 7:00 AM x", "WDI - MC2/Med Tech"),
+            2: ("7:00 AM - 7:00 PM", ""),
+        },
+        query="Assisted Living",
+        assigned_location="WDI - AL1",
+    )
+
+    records = review_records(extract_ukg_schedule(payload))
+
+    assert records["floor"].tolist() == ["AL1", "MC2", "AL1"]
+    assert records["role"].tolist() == ["CNA", "Med Tech", "CNA"]
+    assert records["unit"].tolist() == [
+        "Assisted Living", "Memory Care", "Assisted Living"
+    ]
+    assert records["extraction_confidence"].tolist() == [1.0, 1.0, 1.0]
+
+
+@pytest.mark.parametrize("assigned_location", ["Default", "WDI- Default", "WDI - Default", ""])
+def test_default_or_missing_assignment_still_requires_shift_location(
+    assigned_location: str,
+) -> None:
+    payload = _synthetic_ukg_pdf(
+        {
+            0: ("7:00 AM - 7:00 PM", ""),
+            1: ("7:00 AM - 7:00 PM x", "WDI - MC1/Caregiver"),
+        },
+        query="Assisted Living",
+        assigned_location=assigned_location,
+    )
+
+    records = review_records(extract_ukg_schedule(payload))
+
+    assert records.loc[0, "floor"] == ""
+    assert records.loc[0, "validation_status"] == "Invalid"
+    assert records.loc[0, "extraction_confidence"] < 0.8
+    assert "Location was not found" in records.loc[0, "extraction_notes"]
+    assert records.loc[1, "floor"] == "MC1"
+    assert records.loc[1, "validation_status"] == "Valid"
+
+
+def test_unrecognized_override_is_not_replaced_by_assigned_neighborhood() -> None:
+    payload = _synthetic_ukg_pdf(
+        {0: ("7:00 AM - 7:00 PM", "Unstructured location")},
+        query="Assisted Living",
+        assigned_location="WDI - AL1",
+    )
+
+    records = extract_ukg_schedule(payload)
+
+    assert records.loc[0, "floor"] == "Unstructured location"
+    assert records.loc[0, "extraction_confidence"] < 0.8
+    assert "Location prefix was not recognized" in records.loc[0, "extraction_notes"]
+
+
+def test_assigned_neighborhood_is_reset_on_each_page() -> None:
+    writer = PdfWriter()
+    for query, location in [
+        ("Assisted Living", "WDI - AL1"),
+        ("Memory Care", "WDI - MC2"),
+        ("Assisted Living", "WDI- Default"),
+    ]:
+        payload = _synthetic_ukg_pdf(
+            {0: ("7:00 AM - 7:00 PM", "")},
+            query=query,
+            assigned_location=location,
+        )
+        writer.add_page(PdfReader(BytesIO(payload)).pages[0])
+    output = BytesIO()
+    writer.write(output)
+
+    records = extract_ukg_schedule(output.getvalue())
+
+    assert records["floor"].tolist() == ["AL1", "MC2", ""]
+    assert records["source_page"].tolist() == [1, 2, 3]

@@ -83,6 +83,10 @@ Role is optional for CSV and Excel uploads. Supported UKG PDFs derive the role
 from each shift cell, falling back to the employee's primary job when needed.
 Unit values can use the full care-setting name or `AL`, `MC`, and `SNF`.
 Floor labels may be numeric or text, such as `1`, `2A`, or `Ground`.
+For UKG PDFs, time-only calendar shifts use the employee's assigned
+neighborhood from the facility header. An explicit calendar location takes
+precedence for that shift. Generic `Default` headers still require an
+explicit shift location or manual correction.
 
 ## Review Workflow
 

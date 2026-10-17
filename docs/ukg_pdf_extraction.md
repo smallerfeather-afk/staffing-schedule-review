@@ -8,7 +8,8 @@ The extractor targets the UKG `Employee Schedule - Weekly` PDF layout:
 - one weekly grid per page
 - employee and primary-job columns
 - seven dated day columns
-- shift time and location text inside populated day cells
+- shift times inside populated day cells, with optional location overrides
+- assigned neighborhood in the facility row immediately above the grid
 
 The source PDF is processed in memory and is not stored by the application.
 AL/MC and SNF reports can be uploaded separately; combining them is not
@@ -23,12 +24,25 @@ required.
 | Day-column date | `shift_date` |
 | First time in the shift range | `start_time` |
 | Query/facility care setting | `unit` |
-| Location after the site prefix and before the role suffix | `floor` |
+| Shift location when present; otherwise the assigned neighborhood in the facility header | `floor` |
 | PDF page | `source_page` |
 
 One canonical record is created for each populated employee/day shift cell.
 Blank continuation rows inherit the preceding employee and primary job while
 retaining the role attached to that specific shift.
+
+Time-only shifts inherit the neighborhood after the site prefix in the
+facility header (for example, `Healthcare AL/WDI - AL1` supplies `AL1`).
+The Primary Job supplies the role when no shift role is present. Calendar
+locations and role suffixes override these defaults for that shift only;
+start times always come from the calendar. The assigned neighborhood is
+read separately on each page and never carried across page boundaries.
+
+`Default` and `WDI- Default` headers do not identify an assigned neighborhood.
+Time-only shifts under these headers remain flagged for missing location.
+Unrecognized explicit calendar locations remain flagged for review rather
+than being silently replaced by the header's neighborhood. Older reports
+with explicit locations in every shift continue to use those locations.
 
 For the AL/MC two-week template, the shift's floor prefix determines its
 destination section even when the employee's facility header differs.
@@ -60,7 +74,8 @@ Extraction begins at `1.00`. Confidence is reduced when:
 - the date header cannot be parsed
 - the start time cannot be parsed
 - multiple shift ranges appear in one cell
-- the location is absent or does not match the expected prefix
+- neither a shift location nor an assigned neighborhood is available, or an
+  explicit shift location does not match the expected prefix
 - the employee name is absent
 - the care setting cannot be identified
 
