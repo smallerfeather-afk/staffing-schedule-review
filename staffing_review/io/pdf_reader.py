@@ -85,6 +85,20 @@ def _extract_floor(shift_text: str, role: str) -> tuple[str, str | None]:
     return location, None
 
 
+def _assigned_floor(table: list[list[object]], header_index: int) -> str:
+    """Read the assigned neighborhood from the facility row above the grid."""
+    if header_index == 0:
+        return ""
+    facility = _clean(" ".join(str(cell or "") for cell in table[header_index - 1]))
+    location = facility.rsplit("/", 1)[-1].strip()
+    match = re.fullmatch(r"[^/]+?\s*-\s*(.+)", location)
+    if not match:
+        return ""
+    floor = match.group(1).strip()
+    # Legacy reports still group some employees under a generic Default.
+    return "" if floor.casefold() == "default" else floor
+
+
 def _extract_shift(
     employee_name: str,
     primary_job: str,
@@ -93,6 +107,7 @@ def _extract_shift(
     unit: str,
     page_number: int,
     source_row: int,
+    assigned_floor: str = "",
 ) -> dict[str, object]:
     notes: list[str] = []
     confidence = 1.0
@@ -116,6 +131,8 @@ def _extract_shift(
         notes.append("Start time was not recognized")
 
     floor, floor_note = _extract_floor(shift_text, role)
+    if floor_note == "Location was not found" and assigned_floor:
+        floor, floor_note = assigned_floor, None
     unit = _unit_from_floor(floor, unit)
     if floor_note:
         confidence -= 0.25
@@ -187,6 +204,7 @@ def extract_ukg_schedule(payload: bytes) -> pd.DataFrame:
                 header = table[header_index]
                 page_text = page.extract_text() or ""
                 unit = _infer_unit(page_text)
+                assigned_floor = _assigned_floor(table, header_index)
                 current_employee = ""
                 current_primary_job = ""
 
@@ -215,6 +233,7 @@ def extract_ukg_schedule(payload: bytes) -> pd.DataFrame:
                                 unit=unit,
                                 page_number=page_number,
                                 source_row=len(records) + 2,
+                                assigned_floor=assigned_floor,
                             )
                         )
     except PDFExtractionError:
